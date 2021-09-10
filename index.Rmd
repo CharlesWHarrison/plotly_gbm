@@ -9,22 +9,90 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+## A function to create a contour PDP plot for 2 variables
+```{r include = TRUE}
+# A function to return a partial dependence contour plot
+pdp_contour <- function(var1, var2, n.trees, model_object){
+  # Generate the partial dependence given the variables
+  pd <- model_object %>% partial(pred.var = c(var1, var2), n.trees = n.trees)
+  # Interpolate the partial dependence values to generate a surface 
+  dens <- akima::interp(x = pd[,var1], y = pd[,var2], z = pd$yhat)
+  
+  # Flattened contour partial dependence plot for 2 variables
+  p <- plot_ly(x = dens$x, y = dens$y, z = dens$z, colors = c("blue", "grey", "red"), type = "contour")
+  # Add axis labels for 2D plots
+  p <- p %>% layout(xaxis = list(title = var1), yaxis = list(title = var2))
+  # Return the plot
+  return(p)
+}
 ```
 
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+## A funciton to create an interactive 3D Partial Dependency Plot
+```{r include = TRUE}
+# A function to return a 3D partial dependence plot 
+pdp_3D <- function(var1, var2, n.trees, model_object){
+  
+  pd <- model_object %>% partial(pred.var = c(var1, var2), n.trees = n.trees)
+  dens <- akima::interp(x = pd[,var1], y = pd[,var2], z = pd$yhat)
+  
+  # 3D partial dependence plot with a coloring scale
+  p <- plot_ly(x = dens$x, y = dens$y, z = dens$z, colors = c("blue", "grey", "red"), type = "surface")
+  
+  # Add axis labels for 3D plots
+  p <- p %>% layout(scene = list(xaxis = list(title = var1),
+                                   yaxis = list(title = var2),
+                                   zaxis = list(title = "Partial Dependence")))
+  # Return the plot
+  return(p)
+}
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+## Generate Data
+```{r include = TRUE}
+# Choose a random seed to reproduce the results
+set.seed(007)
+# Generate 5 variables from a multivariate normal distribution
+X <- MASS::mvrnorm(n = 100, mu = rep(0, 5), Sigma = diag(5))
+# Generate a binary variable 
+y <- sample(c(0,1), size = 100, replace = TRUE)
+# Put the data into a dataframe
+data <- data.frame(cbind(y,X))
+# Rename the columns "y", "X1", "X2", "X3", "X4", and "X5"
+colnames(data) <- c("y", paste("X",1:5,sep=""))
+# Show the first 5 rows of the dataframe
+head(data)
+```
+
+## Construct a GBM model
+```{r}
+library(gbm)
+gbm1 <- gbm(data = data, 
+            formula = y ~., 
+            distribution = "bernoulli", 
+            n.trees = 200, 
+            interaction.depth = 3,
+            shrinkage = 0.10, 
+            bag.fraction = 0.5)
+```
+## Single Variable Partial Dependence Plot with pdp
+```{r include = TRUE, message = FALSE, warning = FALSE}
+library(pdp)
+# PDPs for 1 variable using the pdp package
+gbm1 %>% partial(pred.var = "X1", n.trees = 100) %>% plotPartial(smooth = FALSE, lwd = 2)
+gbm1 %>% partial(pred.var = "X2", n.trees = 100) %>% plotPartial(smooth = FALSE, lwd = 2)
+```
+
+## Interactive 3D Partial Dependence Plot with plotly
+```{r include = TRUE, message = FALSE, warning = FALSE}
+# An interactive 3D PDP for two variables using plotly
+# Simply click and drag to rotate the surface (in the IDE not the web browser)
+library(plotly)
+pdp_3D(var1 = "X1", var2 = "X2", n.trees = 100, model_object = gbm1)
+```
+
+## An interactive flattened PDP (i.e. contour plot) for two variables (easier to understand sometimes)
+```{r include = TRUE, message = FALSE, warning = FALSE}
+# Hover the mouse over the plot to see the plot values (in the IDE not the web browser)
+pdp_contour(var1 = "X1", var2 = "X2", n.trees = 100, model_object = gbm1)
+```
+
