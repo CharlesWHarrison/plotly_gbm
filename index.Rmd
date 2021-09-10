@@ -1,11 +1,9 @@
 ---
-title: "3D Partial Dependence Plots Using plotly"
+title: "3D Partial Dependence Plots (PDPs) using the plotly and pdp packages"
 author: "STATS-ML"
 date: "9/10/2021"
 output: html_document
 ---
-
-A block of text
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -14,9 +12,14 @@ knitr::opts_chunk$set(echo = TRUE)
 ## A function to create a contour PDP plot for 2 variables
 ```{r include = TRUE}
 # A function to return a partial dependence contour plot
-pdp_contour <- function(var1, var2, n.trees, model_object){
+pdp_contour <- function(var1, var2, optimal_number_of_trees, model_object){
+  # var1 (string): name of one of the two predictors used in the plot
+  # var2 (string): name of one of the two predictors used in the plot
+  # optimal_number_of_trees (integer): optimal number of trees based on cross-validation or a testing sample 
+  # model_object (gbm): the gbm model used to construct the PDP
+  
   # Generate the partial dependence given the variables
-  pd <- model_object %>% partial(pred.var = c(var1, var2), n.trees = n.trees)
+  pd <- model_object %>% partial(pred.var = c(var1, var2), n.trees = optimal_number_of_trees)
   # Interpolate the partial dependence values to generate a surface 
   dens <- akima::interp(x = pd[,var1], y = pd[,var2], z = pd$yhat)
   
@@ -32,9 +35,13 @@ pdp_contour <- function(var1, var2, n.trees, model_object){
 ## A funciton to create an interactive 3D Partial Dependency Plot
 ```{r include = TRUE}
 # A function to return a 3D partial dependence plot 
-pdp_3D <- function(var1, var2, n.trees, model_object){
+pdp_3D <- function(var1, var2, optimal_number_of_trees, model_object){
+  # var1 (string): name of one of the two predictors used in the plot
+  # var2 (string): name of one of the two predictors used in the plot
+  # optimal_number_of_trees (integer): optimal number of trees based on cross-validation or a testing sample
+  # model_object (gbm): the gbm model used to construct the PDP
   
-  pd <- model_object %>% partial(pred.var = c(var1, var2), n.trees = n.trees)
+  pd <- model_object %>% partial(pred.var = c(var1, var2), n.trees = optimal_number_of_trees)
   dens <- akima::interp(x = pd[,var1], y = pd[,var2], z = pd$yhat)
   
   # 3D partial dependence plot with a coloring scale
@@ -55,8 +62,8 @@ pdp_3D <- function(var1, var2, n.trees, model_object){
 set.seed(007)
 # Generate 5 variables from a multivariate normal distribution
 X <- MASS::mvrnorm(n = 100, mu = rep(0, 5), Sigma = diag(5))
-# Generate a binary variable 
-y <- sample(c(0,1), size = 100, replace = TRUE)
+# Generate a binary variable y based on a simple function
+y <- ifelse(X[,1] <= 2.1 & X[,2] + X[,3] >= -1,1,0)
 # Put the data into a dataframe
 data <- data.frame(cbind(y,X))
 # Rename the columns "y", "X1", "X2", "X3", "X4", and "X5"
@@ -74,27 +81,26 @@ gbm1 <- gbm(data = data,
             n.trees = 200, 
             interaction.depth = 3,
             shrinkage = 0.10, 
-            bag.fraction = 0.5)
-```
-## Single Variable Partial Dependence Plot with pdp
-```{r include = TRUE, message = FALSE, warning = FALSE}
-library(pdp)
-# PDPs for 1 variable using the pdp package
-gbm1 %>% partial(pred.var = "X1", n.trees = 100) %>% plotPartial(smooth = FALSE, lwd = 2)
-gbm1 %>% partial(pred.var = "X2", n.trees = 100) %>% plotPartial(smooth = FALSE, lwd = 2)
+            bag.fraction = 0.5, 
+            cv.folds = 10)
+
+# The optimal number of trees is the number of trees that minimize the cross-validation error
+opt_trees <- which.min(gbm1$cv_error)
 ```
 
 ## Interactive 3D Partial Dependence Plot with plotly
+#### For binary classification, the veritical axis is the 1/2 log-odds of y = 1 given the predictor (see Friedman 2001)
 ```{r include = TRUE, message = FALSE, warning = FALSE}
 # An interactive 3D PDP for two variables using plotly
 # Simply click and drag to rotate the surface (in the IDE not the web browser)
 library(plotly)
-pdp_3D(var1 = "X1", var2 = "X2", n.trees = 100, model_object = gbm1)
+library(pdp)
+pdp_3D(var1 = "X1", var2 = "X2", optimal_number_of_trees = opt_trees, model_object = gbm1)
 ```
 
 ## An interactive flattened PDP (i.e. contour plot) for two variables (easier to understand sometimes)
 ```{r include = TRUE, message = FALSE, warning = FALSE}
 # Hover the mouse over the plot to see the plot values (in the IDE not the web browser)
-pdp_contour(var1 = "X1", var2 = "X2", n.trees = 100, model_object = gbm1)
+pdp_contour(var1 = "X1", var2 = "X2", optimal_number_of_trees = opt_trees, model_object = gbm1)
 ```
 
